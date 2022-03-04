@@ -23,6 +23,14 @@ pub struct WebAchievement {
     image: String
 }
 
+#[derive(Serialize)]
+pub struct UserAchievement {
+    name: String,
+    unlocked: bool,
+    time_unlocked: i64,
+    image: String
+}
+
 impl Responder for Achievement {
     type Body = BoxBody;
 
@@ -42,15 +50,21 @@ pub async fn show_achievements(pool: web::Data<Pool>) -> Result<Json<Vec<Achieve
     }
 }
 
-#[get("{id}")]
-pub async fn get_individual_achievement(req: HttpRequest) -> Result<Achievement, CustomError> {
-    match req.match_info().get("id").unwrap().parse::<u32>() {
-        Ok(valid_id) => match valid_id {
-            1 => Ok(Achievement { name: "You're cool!".to_owned(), image: "AASdkljfasdjf".to_owned(), id: 1 }),
-            _ => Err(CustomError {error_type: errors::ErrorType::NotFound, message: Some(format!("Could not find achievement with id {}", valid_id))})
-        }
-        Err(_) => Err(CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("The provided id must be numeric"))})
-    }
+#[get("/unlocked")]
+pub async fn get_unlocked_achievements(req: HttpRequest, pool: web::Data<Pool>) -> Result<Json<Vec<UserAchievement>>, CustomError> {
+    let user = auth::authenticate_request(&req, &pool, auth::AuthType::user).await?; // Not the right way to do this, this should be a guard
+    let user_achievements = get_unlocked_achievements_sql(pool, user.id.unwrap()).await
+        .map_err(|_| CustomError {error_type: errors::ErrorType::InternalError, message: None})?;
+    Ok(web::Json(user_achievements))
+}
+
+#[get("/individual/{id}")]
+pub async fn get_individual_achievement(req: HttpRequest, pool: web::Data<Pool>) -> Result<Achievement, CustomError> {
+    let achievement_id = req.match_info().get("id").unwrap().parse::<i64>()
+        .map_err(|_| CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("The provided id must be numeric"))})?;
+    let achievement = get_achievement_by_id(&pool, achievement_id).await
+        .map_err(|_| CustomError {error_type: errors::ErrorType::NotFound, message: Some(format!("Could not find achievement with id {}", achievement_id))})?;
+    Ok(achievement)
 }
 
 #[post("")]
@@ -61,7 +75,7 @@ pub async fn post_achievement(achievement: web::Json<WebAchievement>) -> impl Re
 
 #[put("/unlock/{id}")]
 pub async fn unlock_achievement(req: HttpRequest, pool: web::Data<Pool>) -> Result<impl Responder, CustomError> {
-    let user = auth::authenticate_request(&req, &pool, auth::AuthType::user).await?; // Not the right way to do this
+    let user = auth::authenticate_request(&req, &pool, auth::AuthType::user).await?; // Not the right way to do this, this should be a guard
     let achievement_id = req.match_info().get("id").unwrap().parse::<i64>()
         .map_err(|_| CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("Invalid achievement id"))})?;
     let achievement = get_achievement_by_id(&pool, achievement_id).await
@@ -78,6 +92,7 @@ pub fn controller() -> impl HttpServiceFactory {
         .service(post_achievement)
         .service(get_individual_achievement)
         .service(unlock_achievement)
+        .service(get_unlocked_achievements)
 }
 
 async fn unlock_achievement_sql(pool: &web::Data<Pool>, user_id: i64, achievement_id: i64) -> Result<SqliteQueryResult, sqlx::Error> {
@@ -89,7 +104,7 @@ async fn unlock_achievement_sql(pool: &web::Data<Pool>, user_id: i64, achievemen
         "#,
         user_id,
         achievement_id,
-        1 as i64,
+        true,
         time
     ).execute(pool.as_ref()).await
 }
@@ -100,6 +115,19 @@ async fn get_all_achievements(pool: web::Data<Pool>) -> Result<Vec<Achievement>,
         r#"
         SELECT * FROM achievements LIMIT 50
         "#
+    ).fetch_all(pool.as_ref()).await
+}
+
+async fn get_unlocked_achievements_sql(pool: web::Data<Pool>, user_id: i64) -> Result<Vec<UserAchievement>, sqlx::Error> {
+    sqlx::query_as!(
+        UserAchievement,
+        r#"
+        SELECT achievements.name, userAchievements.unlocked, userAchievements.time_unlocked, achievements.image
+        FROM userAchievements
+        INNER JOIN achievements ON achievements.id = userAchievements.achievement_id
+        WHERE userAchievements.user_id = $1 AND userAchievements.unlocked = 1
+        "#,
+        user_id
     ).fetch_all(pool.as_ref()).await
 }
 

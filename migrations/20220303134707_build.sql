@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS userAchievements
 (
     user_id INTEGER NOT NULL,
     achievement_id INTEGER NOT NULL,
-    unlocked INTEGER NOT NULL DEFAULT 0,
+    unlocked BOOLEAN NOT NULL DEFAULT 0,
     time_unlocked INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, achievement_id)
 );
