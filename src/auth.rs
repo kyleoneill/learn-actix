@@ -1,5 +1,4 @@
 use actix_web::{HttpRequest, web};
-use sqlx::Executor;
 use crate::Pool;
 
 #[path = "endpoints/users.rs"] mod users;
@@ -9,8 +8,8 @@ use crate::errors;
 use errors::CustomError;
 
 pub enum AuthType {
-    user,
-    admin
+    User,
+    Admin
 }
 
 pub async fn authenticate_request(req: &HttpRequest, pool: &web::Data<Pool>, auth_type: AuthType) -> Result<User, CustomError> {
@@ -22,8 +21,8 @@ pub async fn authenticate_request(req: &HttpRequest, pool: &web::Data<Pool>, aut
             let user = sqlx::query_as!(User, r#"SELECT * FROM users WHERE username = $1"#, record.username).fetch_one(pool.as_ref()).await
                 .map_err(|_| CustomError {error_type: errors::ErrorType::InternalError, message: None})?;
             match auth_type {
-                AuthType::user => Ok(user),
-                AuthType::admin => {
+                AuthType::User => Ok(user),
+                AuthType::Admin => {
                     match user.is_admin {
                         true => Ok(user),
                         false => Err(CustomError {error_type: errors::ErrorType::InvalidAuth, message: Some(format!("admin authorization required"))})

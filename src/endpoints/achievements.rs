@@ -52,7 +52,7 @@ pub async fn show_achievements(pool: web::Data<Pool>) -> Result<Json<Vec<Achieve
 
 #[get("/unlocked")]
 pub async fn get_unlocked_achievements(req: HttpRequest, pool: web::Data<Pool>) -> Result<Json<Vec<UserAchievement>>, CustomError> {
-    let user = auth::authenticate_request(&req, &pool, auth::AuthType::user).await?; // Not the right way to do this, this should be a guard
+    let user = auth::authenticate_request(&req, &pool, auth::AuthType::User).await?; // Not the right way to do this, this should be a guard
     let user_achievements = get_unlocked_achievements_sql(pool, user.id.unwrap()).await
         .map_err(|_| CustomError {error_type: errors::ErrorType::InternalError, message: None})?;
     Ok(web::Json(user_achievements))
@@ -69,14 +69,14 @@ pub async fn get_individual_achievement(req: HttpRequest, pool: web::Data<Pool>)
 
 #[post("")]
 pub async fn post_achievement(req: HttpRequest, pool: web::Data<Pool>, achievement: web::Json<WebAchievement>) -> Result<impl Responder, CustomError> {
-    let _user = auth::authenticate_request(&req, &pool, auth::AuthType::admin).await?;
+    let _user = auth::authenticate_request(&req, &pool, auth::AuthType::Admin).await?;
     println!("Got achievement with name: {}", achievement.name);
     Ok(HttpResponse::Created())
 }
 
 #[put("/unlock/{id}")]
 pub async fn unlock_achievement(req: HttpRequest, pool: web::Data<Pool>) -> Result<impl Responder, CustomError> {
-    let user = auth::authenticate_request(&req, &pool, auth::AuthType::user).await?; // Not the right way to do this, this should be a guard
+    let user = auth::authenticate_request(&req, &pool, auth::AuthType::User).await?; // Not the right way to do this, this should be a guard
     let achievement_id = req.match_info().get("id").unwrap().parse::<i64>()
         .map_err(|_| CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("Invalid achievement id"))})?;
     let achievement = get_achievement_by_id(&pool, achievement_id).await
