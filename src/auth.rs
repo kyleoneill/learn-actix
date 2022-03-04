@@ -1,4 +1,5 @@
 use actix_web::{HttpRequest, web};
+use sqlx::Executor;
 use crate::Pool;
 
 #[path = "endpoints/users.rs"] mod users;
@@ -16,25 +17,18 @@ pub async fn authenticate_request(req: &HttpRequest, pool: &web::Data<Pool>, aut
     match req.headers().get(actix_web::http::header::AUTHORIZATION) {
         Some(header) => {
             let token = header.to_str().unwrap();
-            match sqlx::query!(
-                r#"
-                SELECT username FROM tokens WHERE token = $1
-                "#,
-                token,
-            ).fetch_one(pool.as_ref()).await {
-                Ok(record) => {
-                    match sqlx::query_as!(
-                        User,
-                        r#"
-                        SELECT * FROM users WHERE username = $1
-                        "#,
-                        record.username
-                    ).fetch_one(pool.as_ref()).await {
-                        Ok(user_record) => Ok(user_record),
-                        Err(_e) => Err(CustomError {error_type: errors::ErrorType::InternalError, message: None})
+            let record = sqlx::query!(r#"SELECT username FROM tokens WHERE token = $1"#, token).fetch_one(pool.as_ref()).await
+                .map_err(|_| CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("invalid token in authorization header"))})?;
+            let user = sqlx::query_as!(User, r#"SELECT * FROM users WHERE username = $1"#, record.username).fetch_one(pool.as_ref()).await
+                .map_err(|_| CustomError {error_type: errors::ErrorType::InternalError, message: None})?;
+            match auth_type {
+                AuthType::user => Ok(user),
+                AuthType::admin => {
+                    match user.is_admin {
+                        true => Ok(user),
+                        false => Err(CustomError {error_type: errors::ErrorType::InvalidAuth, message: Some(format!("admin authorization required"))})
                     }
                 }
-                Err(_) => Err(CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("invalid token in authorization header"))})
             }
         },
         None => Err(CustomError {error_type: errors::ErrorType::BadClientData, message: Some(format!("missing authorization header"))})

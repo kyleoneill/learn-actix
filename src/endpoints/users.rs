@@ -15,16 +15,7 @@ pub struct User {
     pub id: Option<i64>,
     pub username: String,
     pub hashed_password: String,
-    pub is_admin: i64
-}
-
-impl User {
-    pub fn is_admin(&self) -> bool {
-        match self.is_admin {
-            0 => false,
-            _ => true
-        }
-    }
+    pub is_admin: bool
 }
 
 pub struct Token {

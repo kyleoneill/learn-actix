@@ -68,9 +68,10 @@ pub async fn get_individual_achievement(req: HttpRequest, pool: web::Data<Pool>)
 }
 
 #[post("")]
-pub async fn post_achievement(achievement: web::Json<WebAchievement>) -> impl Responder {
+pub async fn post_achievement(req: HttpRequest, pool: web::Data<Pool>, achievement: web::Json<WebAchievement>) -> Result<impl Responder, CustomError> {
+    let _user = auth::authenticate_request(&req, &pool, auth::AuthType::admin).await?;
     println!("Got achievement with name: {}", achievement.name);
-    HttpResponse::Created()
+    Ok(HttpResponse::Created())
 }
 
 #[put("/unlock/{id}")]
