@@ -101,16 +101,10 @@ async fn verify_user(pool: &web::Data<Pool>, web_user: &web::Json<WebUser>) -> R
 }
 
 async fn generate_token(pool: &web::Data<Pool>, username: &str) -> Result<String, sqlx::Error> {
-    sqlx::query!(
-        r#"
-        DELETE FROM tokens WHERE username = $1
-        "#,
-        username
-    ).execute(pool.as_ref()).await.unwrap();
     let token = random_string(25);
     match sqlx::query!(
         r#"
-        INSERT INTO tokens (token, username) VALUES ($1, $2)
+        REPLACE INTO tokens (token, username) VALUES ($1, $2)
         "#,
         token,
         username
